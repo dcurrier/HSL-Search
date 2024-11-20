@@ -1,8 +1,8 @@
 
-# HSL Function Finder
+# Search HSL
 
 ## Overview
-HSL Function Finder is a Python web application that facilitates the extraction and exploration of functions from `.hsl`, `.hs_`, and `.hsi` files in a specified directory. Built using Flask, it provides a user-friendly interface to list, search, and highlight function details from the selected files.
+Search HSL is a Python web application that facilitates the extraction and exploration of functions from `.hsl`, `.hs_`, and `.hsi` files in a specified directory. Built using Flask, it provides a user-friendly interface to list, search, and highlight function details from the selected files.
 
 ## Features
 - **Function Extraction**: Scans `.hsl`, `.hs_`, and `.hsi` files in a directory to extract functions, arguments, return types, and file paths.
@@ -16,18 +16,18 @@ HSL Function Finder is a Python web application that facilitates the extraction 
 
 ## Installation
 1. Clone or download the repository:
-   ```bash
-   git clone https://github.com/dcurrier/HSL-Search/Search%20HSL.git
-   cd hsl-search
+   ```
+   git clone https://github.com/dcurrier/HSL-Search.git
+   cd HSL-Search
    ```
 2. Install required Python packages:
-   ```bash
+   ```
    pip install flask
    ```
 
 ## Usage
 1. Start the application:
-   ```bash
+   ```
    python Search_HSL.py
    ```
 2. Open your browser and navigate to:
