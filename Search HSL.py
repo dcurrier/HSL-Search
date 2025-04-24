@@ -2,14 +2,16 @@ from flask import Flask, render_template_string, request
 import os
 from pathlib import Path
 import re
+import subprocess
+import platform
 
 # Function to extract function names and return types from .hsl/.hs_/.hsi files
-def extract_functions_from_file(file_path, root_directory):
+def extract_functions_from_file(file_path, root_directory, help_file):
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
         content = file.read()
 
     # Updated Regex pattern for functions with named capture groups (name, args, returns)
-    function_pattern = r"^\s*function\s+(?P<name>\w+)\s*\((?P<args>.*)\)\s*(?P<returns>\w*)\s*{"
+    function_pattern = r"^\s*function\s+(?P<name>\w+)\s*\((?P<args>.*)\)\s*(?P<returns>\w*)\s*[\n\r]{"
     matches = re.finditer(function_pattern, content, re.MULTILINE)
 
     # Collecting function details
@@ -29,6 +31,7 @@ def extract_functions_from_file(file_path, root_directory):
             "return_type": return_type,
             "file_path": relative_file_path,
             "full_file_path": file_path,
+            "help_file_path": help_file,
             "line_number": line_number
         })
     
@@ -40,6 +43,7 @@ def extract_all_functions(directory):
     for root, _, files in os.walk(directory):
         for file in files:
             file_path = Path(root) / file
+            dir_path = Path(file_path).parent
 
             # Exclude files that start with "~"
             if file.startswith("~"):
@@ -49,17 +53,24 @@ def extract_all_functions(directory):
             stem = file_path.stem
 
             # Collect functions from .hsl, .hs_, .hsi files
-            if file_ext in ['.hsl', '.hs_', '.hsi']:
-                functions = extract_functions_from_file(file_path, directory)
-
-                # Check if the stem already exists in all_functions and if the function list is non-empty
-                if stem in all_functions and len(all_functions[stem]) > 0:
-                    # If the existing file is an .hsl, skip adding functions from .hs_ or .hsi
-                    if Path(all_functions[stem][0]['file_path']).suffix == '.hsl' and file_ext in ['.hs_', '.hsi']:
-                        continue
+            if file_ext in ['.hsl', '.hsi']:
+                if file_ext == ".hsl":
+                    hs_path = file_path.with_suffix(".hs_")
+                    extraction_file_path = hs_path if hs_path.exists() else file_path
                 else:
-                    # Add the functions if the stem doesn't exist yet or the list is empty
-                    all_functions[stem] = functions
+                    extraction_file_path = file_path
+
+                # Look for a help file with the same stem
+                help_file_path = None
+                for chm in dir_path.glob(f"{stem}*.chm"):
+                    help_file_path = chm
+                    break  # just use the first matching one
+
+                functions = extract_functions_from_file(extraction_file_path, directory, help_file_path)
+
+                # Add the functions if the stem doesn't exist yet or the list is empty
+                all_functions[stem] = functions
+                
     
     # Flatten the dictionary to a list of functions
     flat_function_list = [func for func_list in all_functions.values() for func in func_list]
@@ -117,6 +128,7 @@ def create_html(all_functions):
                     <th>Arguments</th>
                     <th>Return Type</th>
                     <th>File Path</th>
+                    <th>Help File</th>
                 </tr>
             </thead>
             <tbody id="functionList">
@@ -128,6 +140,11 @@ def create_html(all_functions):
                     <td>{{ func.arguments }}</td>
                     <td>{{ func.return_type }}</td>
                     <td>{{ func.file_path }}</td>
+                    <td>{% if func.help_file_path %} <a href="/open_help?file={{ func.help_file_path }}" target="_blank">Open Help</a>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -224,15 +241,17 @@ def view_file():
         with open(file_path, 'r') as f:
             lines = f.readlines()
         
-        # Generate HTML for the file content
-        highlighted_lines = ""
-        for i, line in enumerate(lines):
+        # Escape HTML special characters
+        escaped_lines = [line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') for line in lines]
+
+        # Highlight the target line
+        for i in range(len(escaped_lines)):
             if i == line_number - 1:
-                highlighted_lines += f'<span id="line-{line_number}" style="background-color:yellow;">{line}</span><br>'
-            else:
-                highlighted_lines += f'{line}<br>'
-        
-        # Add JavaScript to scroll to the highlighted line
+                escaped_lines[i] = f'<span id="line-{line_number}" style="background-color:yellow;">{escaped_lines[i]}</span>'
+
+        # Join without <br> so <pre> preserves formatting
+        content = ''.join(escaped_lines)
+
         return f'''
         <html>
         <head>
@@ -248,12 +267,24 @@ def view_file():
         </head>
         <body>
             <h1>File: {file_path}</h1>
-            <pre>{highlighted_lines}</pre>
+            <pre>{content}</pre>
         </body>
         </html>
         '''
     except FileNotFoundError:
         return f"File {file_path} not found."
+
+@app.route('/open_help')
+def open_help():
+    file = request.args.get('file')
+    full_path = os.path.abspath(file)
+
+    # Windows-only: Use explorer to open .chm file
+    if platform.system() == "Windows" and os.path.exists(full_path):
+        subprocess.Popen(['explorer', full_path], shell=True)
+        return f"<html><body><p>Opening help file: {file}</p><a href='/'>Back</a></body></html>"
+    else:
+        return f"<html><body><p>Help file not found or unsupported platform.</p><a href='/'>Back</a></body></html>"
 
 
 
